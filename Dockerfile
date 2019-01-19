@@ -1,39 +1,52 @@
+# This image provides a base for building and running Apache-Tomcat applications.
+# It builds using maven and runs the resulting artifacts on Apache-Tomcat
 
-# tomcat
 FROM openshift/base-centos7
 
-# TODO: Put the maintainer name in the image metadata
-# MAINTAINER Your Name <your@email.com>
+MAINTAINER Sarcouy <sarcouy@protonmail.com>
 
-# TODO: Rename the builder environment variable to inform users about application you provide them
-# ENV BUILDER_VERSION 1.0
+EXPOSE 8080
+RUN echo "proxy=http://10.0.0.128:3128" >> /etc/yum.conf
+RUN cat /etc/yum.conf
+ENV TOMCAT_VERSION=8.5.37 \
+    TOMCAT_MAJOR=8 \
+    MAVEN_VERSION=3.5.4 \
+    TOMCAT_DISPLAY_VERSION=8 \
+    CATALINA_HOME=/tomcat \
+    JAVA="java-1.8.0-openjdk java-1.8.0-openjdk-devel" \
+    JAVA_TOOL_OPTIONS=-Dfile.encoding=UTF8 \
+    POM_PATH=.
 
-# TODO: Set labels used in OpenShift to describe the builder image
-#LABEL io.k8s.description="Platform for building xyz" \
-#      io.k8s.display-name="builder x.y.z" \
-#      io.openshift.expose-services="8080:http" \
-#      io.openshift.tags="builder,x.y.z,etc."
+LABEL io.k8s.description="Platform for building and running Java applications on Apache-Tomcat 8.0.43" \
+      io.k8s.display-name="Apache-Tomcat 8.0.43" \
+      io.openshift.expose-services="8080:http" \
+      io.openshift.tags="builder,tomcat,tomcat8" \
+      io.openshift.s2i.destination="/opt/s2i/destination"
+RUN echo https://www.apache.org/dist/maven/maven-3/$MAVEN_VERSION/binaries/apache-maven-$MAVEN_VERSION-bin.tar.gz 
+RUN echo https://www.apache.org/dist/tomcat/tomcat-$TOMCAT_MAJOR/v$TOMCAT_VERSION/bin/apache-tomcat-$TOMCAT_VERSION.tar.gz 
+# Install Maven, Tomcat, Java
+RUN INSTALL_PKGS="tar unzip bc which lsof $JAVA" && \
+    yum install -y --enablerepo=centosplus $INSTALL_PKGS && \
+    rpm -V $INSTALL_PKGS && \
+    yum clean all -y && \
+    (curl  https://www.apache.org/dist/maven/maven-3/$MAVEN_VERSION/binaries/apache-maven-$MAVEN_VERSION-bin.tar.gz | \
+    tar -zx -C /usr/local) && \
+    ln -sf /usr/local/apache-maven-$MAVEN_VERSION/bin/mvn /usr/local/bin/mvn && \
+    mkdir -p $HOME/.m2 && \
+    mkdir -p /tomcat && \
+    (curl  https://www.apache.org/dist/tomcat/tomcat-$TOMCAT_MAJOR/v$TOMCAT_VERSION/bin/apache-tomcat-$TOMCAT_VERSION.tar.gz | tar -zx --strip-components=1 -C /tomcat) && \
+    mkdir -p /opt/s2i/destination
 
-# TODO: Install required packages here:
-# RUN yum install -y ... && yum clean all -y
-RUN yum install -y rubygems && yum clean all -y
-RUN gem install asdf
+# Add s2i tomcat customizations
+ADD ./contrib/settings.xml $HOME/.m2/
 
-# TODO (optional): Copy the builder files into /opt/app-root
-# COPY ./<builder_folder>/ /opt/app-root/
+# Copy the S2I scripts from the specific language image to $STI_SCRIPTS_PATH
+COPY ./s2i/bin/ $STI_SCRIPTS_PATH
 
-# TODO: Copy the S2I scripts to /usr/libexec/s2i, since openshift/base-centos7 image
-# sets io.openshift.s2i.scripts-url label that way, or update that label
-COPY ./s2i/bin/ /usr/libexec/s2i
+RUN chown -R 1001:0 /tomcat && chown -R 1001:0 $HOME && \
+    chmod -R ug+rwx /tomcat && \
+    chmod -R g+rw /opt/s2i/destination
 
-# TODO: Drop the root user and make the content of /opt/app-root owned by user 1001
-# RUN chown -R 1001:1001 /opt/app-root
-
-# This default user is created in the openshift/base-centos7 image
 USER 1001
 
-# TODO: Set the default port for applications built using this image
-# EXPOSE 8080
-
-# TODO: Set the default CMD for the image
-# CMD ["/usr/libexec/s2i/usage"]
+CMD $STI_SCRIPTS_PATH/usage
