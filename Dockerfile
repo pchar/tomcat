@@ -6,7 +6,7 @@ FROM openshift/base-centos7
 MAINTAINER Sarcouy <sarcouy@protonmail.com>
 
 EXPOSE 8080
-RUN echo "proxy=http://10.0.0.128:3128" >> /etc/yum.conf
+RUN echo "proxy=http://sun.local:3128" >> /etc/yum.conf
 RUN cat /etc/yum.conf
 ENV TOMCAT_VERSION=8.5.37 \
     TOMCAT_MAJOR=8 \
